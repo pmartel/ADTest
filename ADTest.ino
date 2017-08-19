@@ -38,9 +38,11 @@ void loop() {
   bool  testOn = false;
   int   samples, count;
   unsigned long   sum, sumSq;
-  unsigned int    dms = 1;
+  unsigned long   dUsec = 1;
   int   mSpeed = 0;
   int   i;  
+  unsigned long   loopTime, lastTime;
+  char  dStr[20];
   
   while ( true ) {
 
@@ -59,7 +61,7 @@ void loop() {
       case '?' :
         Help();
         Serial << "Process " << samples << " samples\r\n";
-        Serial << "Loop delay = " << dms << " msec\r\n";
+        Serial << "Loop delay = " << dUsec << " usec\r\n";
         Serial << "Run motor at " << mSpeed << endl<<endl;
         break;
       case 'a' : // get A/D paramenters
@@ -67,8 +69,8 @@ void loop() {
         Serial << "Process " << samples << " samples\r\n";
         break;
       case 'd' :
-        dms = Serial.parseInt();
-        Serial << "Loop delay = " << dms << " msec\r\n";
+        dUsec = Serial.parseInt();
+        Serial << "Loop delay = " << dUsec << " usec\r\n";
         break;
       case 'm' :
         mSpeed = Serial.parseInt();
@@ -84,6 +86,7 @@ void loop() {
         }
         Serial << "\r\nStarting test\r\n";
         MotorOn( mSpeed );
+        lastTime = micros();
         delay( 1000 ); // wait for motor to come up to speed
         break;
       case 's' : // stop controller
@@ -111,7 +114,8 @@ void loop() {
         Serial << "mean = " << mean << " std = " << std << " counts\r\n";
         mean = 143.996650585439 + (-0.241484320020696) * mean;
         std = (0.241484320020696) * std;
-        Serial << "mean = " << mean << " std = " << std << " degrees\r\n\n";
+        Serial << "mean = " << mean << " std = " << std << " degrees\r\n";
+        Serial << "last loopTime " << loopTime << endl;
         Serial << "Histogram\r\nn\tcount\r\n";
         for ( i=0; i < 32; i++ ){
           Serial << (i << 5) << "\t" << histo[i] << endl;
@@ -131,7 +135,12 @@ void loop() {
         histo[potCount >> 5]++;
 // debug Serial << count << "\t"<< potCount << "\t"<< sum << "\t"<< sumSq<<endl;
       }
-      delay( dms );
+      do {
+        loopTime = micros() - lastTime;
+      } while ( loopTime < dUsec );
+      
+      lastTime += loopTime; // so lastTime = micros()
+
     } // run test
   } // while true
 
@@ -167,7 +176,6 @@ void MotorOn( int sp ) {
   }
   Serial << "motor set to " << sp <<endl;
 }
-
 
 // read the angle and return it.
 // potCount and angle read are globals,for convenience in DisplayAngle
