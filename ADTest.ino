@@ -8,6 +8,12 @@
 #include <Streaming.h>
 #include <Adafruit_MotorShield.h>
 
+// debug code
+#define EN(x) Serial << "entering " << x << endl
+#define EX(x) Serial << "exiting " << x << endl
+
+#define H ((Histogram *)Histo)
+
 // constants
 const int analogInPin = A0;  // Analog input pin that the potentiometer is attached to
 
@@ -17,13 +23,88 @@ float   angleRead;
 unsigned long   sTime;  // for tic(), toc()
 unsigned long   gTime;  // global for gTime = toc()
 
-// for histogram
-unsigned int histo[32];
+
+
 // motor related
 // Create the motor shield object with the default I2C address
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 // Select which 'port' M1, M2, M3 or M4. In this case, M4
 Adafruit_DCMotor *myMotor = AFMS.getMotor(4);
+
+// Histogram class mostly it assumes we've working with ints
+class Histogram {
+  public:
+  int *hist;
+  int histSize;
+  int low, below;
+  int high, above;
+  int shift; // for speed, spacing is power of 2
+  
+  Histogram( int n) {
+    //EN("Histogram");
+    this->histSize = n;
+    this->hist = new int[n];
+    //EX("Histogram");
+  }
+  
+  ~Histogram() {
+    delete this->hist;
+  }
+  
+  void Add( int d ) {
+    //EN("Add");
+    if (  d < this->low ) {
+      this->below++;  
+    }
+    else if ( d > this->high ) {
+      this->above++;
+    }
+    else {
+      hist[(d-this->low)>>this->shift]++;
+    }
+    //EX("Add");
+  }
+  
+  void Clear(){
+    int i;
+    //EN("Clear");
+    Serial << "&hist=" << (unsigned int)&(this->hist) << " histSize=" << this->histSize << endl;
+    for( i = 0; i < this->histSize;i++ ){
+      this->hist[i] = 0;
+    }
+    this->below = 0;
+    this->above = 0;
+    //EX("Clear");    
+  }
+  
+  void Dump(){
+    int i, bin;
+    
+    Serial << "bin\tcount\r\n";
+    Serial << "below\t" << this->below << endl;
+    for ( i = 0; i < this->histSize; i++ ) {
+      bin = this->low -1 + (1 << this->shift)*i;
+      Serial << bin << "\t" << this->hist[i] << endl;
+    }
+    Serial << "above\t" << this->above << endl << endl;
+  }
+  
+  void SetScale( int l, int h){
+    int d;
+    Serial << "SetScale( " << l << ", " << h << ")\r\n";
+
+    this->low = l;
+    this->high = h;
+    d = (h-l+1)/this->histSize;
+
+    for(this->shift = 0; (1 <<this->shift) < d; this->shift++){}
+    Serial << "d= " << d << " shift= " << this->shift <<endl;
+  }
+};
+
+//Histogram Histo = new Histogram(32);
+void *Histo; //this works using the H macro to cast it to Histogram *
+  
 
 void setup() {
   // Set up serial port
@@ -31,6 +112,7 @@ void setup() {
   Help();
   AFMS.begin();  // create with the default frequency 1.6KHz
   myMotor->run(RELEASE); // make sure motor is stopped
+  Histo = new Histogram(32);
 }
 
 void loop() {
@@ -39,6 +121,7 @@ void loop() {
   int   samples, count;
   unsigned long   sum, sumSq;
   unsigned long   dUsec = 1;
+  int   histRange = 32;
   int   mSpeed = 0;
   int   i;  
   unsigned long   loopTime, lastTime;
@@ -57,11 +140,11 @@ void loop() {
         Serial << "Stopping test, resetting parameters\r\n";
         return;
         break;
-      case 'h' :
       case '?' :
         Help();
         Serial << "Process " << samples << " samples\r\n";
         Serial << "Loop delay = " << dUsec << " usec\r\n";
+        Serial << "histogram range = " << histRange << " histogram  bins = " << H->histSize << endl; 
         Serial << "Run motor at " << mSpeed << endl<<endl;
         break;
       case 'a' : // get A/D paramenters
@@ -80,10 +163,7 @@ void loop() {
         testOn = true;
         sum = sumSq = 0L;
         count = 0;
-        // clear histogram
-        for ( i=0; i < 32; i++) {
-          histo[i] = 0;
-        }
+        H->Clear();
         Serial << "\r\nStarting test\r\n";
         MotorOn( mSpeed );
         lastTime = micros();
@@ -92,6 +172,10 @@ void loop() {
       case 's' : // stop controller
         testOn = false;
         MotorOn( 0 );
+        break;
+      case 'r' :
+        histRange = Serial.parseInt();
+        Serial << "histogram range = " << dUsec << endl;
         break;
       default: // bad input, just eat the character
         break;
@@ -116,23 +200,23 @@ void loop() {
         std = (0.241484320020696) * std;
         Serial << "mean = " << mean << " std = " << std << " degrees\r\n";
         Serial << "last loopTime " << loopTime << endl;
-        Serial << "Histogram\r\nn\tcount\r\n";
-        for ( i=0; i < 32; i++ ){
-          Serial << (i << 5) << "\t" << histo[i] << endl;
-        }
-        Serial << endl;
+        Serial << "Histogram\r\n";
+        H->Dump();
         myMotor->run(RELEASE); // make sure motor is stopped (coasting)
         testOn = false;
       }
       else { //not finished
-//        if (1 == count ){ // debug
-//          Serial << "n\tv\tsum\tsumSq\r\n";
-//        }
+        int r;
         // read the analog in value:
         potCount = analogRead(analogInPin);
+        if (1 == count ) { 
+          // first time through, set up scaling for histo around current value
+          r = histRange >>1;
+          H->SetScale( potCount-r, potCount+r-1); // one count per bin
+        }
         sum += potCount;
         sumSq += sq((unsigned long)potCount);
-        histo[potCount >> 5]++;
+        H->Add(potCount);
 // debug Serial << count << "\t"<< potCount << "\t"<< sum << "\t"<< sumSq<<endl;
       }
       do {
@@ -151,10 +235,13 @@ void loop() {
 
 void Help() {
   Serial << "A/D noise test\r\n";
+  Serial << "? - print help information\r\n";
   Serial << "q - stop motor, reset\r\n";
-  Serial << "a<number> - select number of samples\r\n";
+  Serial << "a<number> - select number of angle samples\r\n";
+  Serial << "d<number> - loop delay (uSec)\r\n";
   Serial << "m<number> - set motor speed\r\n";
   Serial << "g - go\r\n";
+  Serial << "r - range for histogram\r\n";
   Serial << "s - stop early\r\n";
 }
 
