@@ -12,6 +12,7 @@
 #define EN(x) Serial << "entering " << x << endl
 #define EX(x) Serial << "exiting " << x << endl
 
+#define UL unsigned long
 #define H ((Histogram *)Histo)
 
 // constants
@@ -20,8 +21,8 @@ const int analogInPin = A0;  // Analog input pin that the potentiometer is attac
 // globals
 int     potCount = 0;        // value read from the pot
 float   angleRead;
-unsigned long   sTime;  // for tic(), toc()
-unsigned long   gTime;  // global for gTime = toc()
+UL   sTime;  // for tic(), toc()
+UL   gTime;  // global for gTime = toc()
 
 
 
@@ -34,7 +35,7 @@ Adafruit_DCMotor *myMotor = AFMS.getMotor(4);
 // Histogram class mostly it assumes we've working with ints
 class Histogram {
   public:
-  int *hist;
+  UL *hist;
   int histSize;
   int low, below;
   int high, above;
@@ -43,7 +44,7 @@ class Histogram {
   Histogram( int n) {
     //EN("Histogram");
     this->histSize = n;
-    this->hist = new int[n];
+    this->hist = new UL[n];
     //EX("Histogram");
   }
   
@@ -118,13 +119,14 @@ void setup() {
 void loop() {
   char  inByte;
   bool  testOn = false;
-  int   samples, count;
-  unsigned long   sum, sumSq;
-  unsigned long   dUsec = 1;
+  UL  samples, count;
+  //unsigned long   sum, sumSq; this is "better" except sumSq can exceed 4G
+  UL   sum, sumSq;
+  UL   dUsec = 1;
   int   histRange = 32;
   int   mSpeed = 0;
   int   i;  
-  unsigned long   loopTime, lastTime;
+  UL   loopTime, lastTime;
   char  dStr[20];
   
   while ( true ) {
@@ -142,8 +144,8 @@ void loop() {
         break;
       case '?' :
         Help();
-        Serial << "Process " << samples << " samples\r\n";
-        Serial << "Loop delay = " << dUsec << " usec\r\n";
+        Serial << "Process " << samples << " samples " << "Loop delay = " << dUsec << " usec\r\n";
+        Serial << "Run time = " << samples * dUsec * 1e-6 << " sec\r\n";
         Serial << "histogram range = " << histRange << " histogram  bins = " << H->histSize << endl; 
         Serial << "Run motor at " << mSpeed << endl<<endl;
         break;
@@ -162,12 +164,13 @@ void loop() {
       case 'g' : // go - start controller
         testOn = true;
         sum = sumSq = 0L;
-        count = 0;
+        count = 0L;
         H->Clear();
         Serial << "\r\nStarting test\r\n";
         MotorOn( mSpeed );
         lastTime = micros();
         delay( 1000 ); // wait for motor to come up to speed
+        Serial << "Run time = " << samples * dUsec * 1e-6 << " sec\r\n";
         break;
       case 's' : // stop controller
         testOn = false;
@@ -184,9 +187,9 @@ void loop() {
     if ( testOn ) { // run test
       if ( count++ >= samples ) { // finished, display data
         double mean, std;
-        
+
         mean = sum / samples;
-        std = sqrt(sumSq/samples - sq(mean));
+        std = sqrt((double(sumSq)/samples) - sq(mean));
         Serial << "For " << samples << " samples with motor ";
         if ( 0 == mSpeed ) {
           Serial << "stopped\r\n";
@@ -194,7 +197,9 @@ void loop() {
         else {
           Serial << "set to " << mSpeed << endl;
         }
-        // debug Serial << "sum=" << sum <<" sumSq=" << sumSq << " samples=" << samples << endl;
+        // basicaly, it's a crap shoot for more than about 1000 samples
+        // setting sum and sumSq to unsinged long cam overflow.  Using Arduino's double loses too much precision.
+        Serial << "sum=" << sum <<" sumSq=" << sumSq << " samples=" << samples << endl;
         Serial << "mean = " << mean << " std = " << std << " counts\r\n";
         mean = 143.996650585439 + (-0.241484320020696) * mean;
         std = (0.241484320020696) * std;
@@ -207,6 +212,7 @@ void loop() {
       }
       else { //not finished
         int r;
+        
         // read the analog in value:
         potCount = analogRead(analogInPin);
         if (1 == count ) { 
@@ -215,7 +221,7 @@ void loop() {
           H->SetScale( potCount-r, potCount+r-1); // one count per bin
         }
         sum += potCount;
-        sumSq += sq((unsigned long)potCount);
+        sumSq += sq((UL)potCount);
         H->Add(potCount);
 // debug Serial << count << "\t"<< potCount << "\t"<< sum << "\t"<< sumSq<<endl;
       }
@@ -277,9 +283,9 @@ float ReadAngle() {
 
 // if at least t milliseconds has passed since last call, reset timer and return true
 // allows non-blocking timed events
-boolean Timer( unsigned long t ) {
-  static unsigned long  last = 0;
-  unsigned long ms = millis();
+boolean Timer( UL t ) {
+  static UL  last = 0;
+  UL ms = millis();
 
   if ( ms >= t + last ) {
     last = ms;
@@ -295,7 +301,7 @@ void tic() {
   sTime = micros();
 }
 
-unsigned long toc() {
+UL toc() {
   return micros() - sTime;
 }
 
