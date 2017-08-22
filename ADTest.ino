@@ -37,8 +37,8 @@ class Histogram {
   public:
   UL *hist;
   int histSize;
-  int low, below;
-  int high, above;
+  int low, high;
+  UL below, above;
   int shift; // for speed, spacing is power of 2
   
   Histogram( int n) {
@@ -71,10 +71,10 @@ class Histogram {
     //EN("Clear");
     Serial << "&hist=" << (unsigned int)&(this->hist) << " histSize=" << this->histSize << endl;
     for( i = 0; i < this->histSize;i++ ){
-      this->hist[i] = 0;
+      this->hist[i] = 0L;
     }
-    this->below = 0;
-    this->above = 0;
+    this->below = 0L;
+    this->above = 0L;
     //EX("Clear");    
   }
   
@@ -197,8 +197,8 @@ void loop() {
         else {
           Serial << "set to " << mSpeed << endl;
         }
-        // basicaly, it's a crap shoot for more than about 1000 samples
-        // setting sum and sumSq to unsinged long cam overflow.  Using Arduino's double loses too much precision.
+        // basically, it's a crap shoot for more than about 1000 samples
+        // setting sum and sumSq to unsinged long can overflow.  Using Arduino's double loses too much precision.
         Serial << "sum=" << sum <<" sumSq=" << sumSq << " samples=" << samples << endl;
         Serial << "mean = " << mean << " std = " << std << " counts\r\n";
         mean = 143.996650585439 + (-0.241484320020696) * mean;
