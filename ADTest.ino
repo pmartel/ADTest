@@ -257,7 +257,7 @@ void MotorOn( int sp ) {
   sp = constrain( (int)sp, -255, 255 );
   if ( 0 != sp ) {
     myMotor->setSpeed( abs(sp) );
-    if ( sp <= 0 ) {
+    if ( sp >= 0 ) {
       myMotor->run(FORWARD);
     }
     else {
